@@ -273,16 +273,14 @@ All configuration via `config.json`:
 | Command | Resume Support | Notes |
 |---------|----------------|-------|
 | `scan` | ✅ Idempotent | Can re-run anytime, produces same output |
-| `process` | ❌ **NOT resumable** | Processes ALL files every run - no checkpointing |
+| `process` | ✅ **Resumable** | Checkpoint-based with state file |
 | `aggregate` | ✅ Works | Reads processed.json |
 | `publish` | ✅ Idempotent | Handles duplicates |
 | `export` | ✅ Idempotent | Can re-run |
 
-**Problem:** The `process` command has NO checkpointing. If interrupted mid-way through 1000 files, progress is lost and all files are re-processed on restart.
+### 8.2 Implementation
 
-### 8.2 Proposed Solution
-
-Implement checkpoint-based resume using a state file (`processing-state.json`):
+Checkpoint-based resume is implemented using a state file (`.processing-state/{scanFileName}-state.json`):
 
 **State File Structure:**
 ```json
@@ -298,7 +296,10 @@ Implement checkpoint-based resume using a state file (`processing-state.json`):
     ...
   ],
   "failedFiles": [
-    { "file": "document_123.msg", "error": "..." }
+    { "filePath": "document_123.msg", "errorMessage": "...", "failedAt": "...", "attemptCount": 1 }
+  ],
+  "processedDocuments": [
+    { /* ProcessedKnowledge JSON objects */ }
   ],
   "startedAt": "2025-01-19T10:30:00Z",
   "lastUpdated": "2025-01-19T14:45:00Z"
@@ -312,15 +313,20 @@ Implement checkpoint-based resume using a state file (`processing-state.json`):
    - Continue from `lastProcessedIndex + 1`
 2. After each file is successfully processed:
    - Add to `completedFiles` list
+   - Store processed document in `processedDocuments`
    - Update `lastProcessedIndex` and `lastUpdated`
 3. If a file fails:
-   - Add to `failedFiles` with error message
+   - Add to `failedFiles` with error message and attempt count
    - Continue processing next file (don't stop)
 4. On completion:
    - Show summary: X completed, Y failed, Z remaining
    - Option to retry failed files
 
-**New Command Line Options:**
+**State File Location:**
+- Stored in `.processing-state/` directory in the working directory
+- Named after the scan file: `{scanFileName}-state.json`
+
+**Command Line Options:**
 - `--resume` - Resume from previous run (default if state file exists)
 - `--force` - Start fresh, ignore state file
 - `--retry-failed` - Only process previously failed files
@@ -353,6 +359,7 @@ LegacyDocProcessor process --input scan-results.json --retry-failed
 | **Services** | TopicAggregator | Merging, deduplication, grouping |
 | **Services** | ConfluenceClient | Markdown→Storage format conversion |
 | **Services** | LocalKnowledgeBaseService | Markdown generation |
+| **Services** | ProcessingStateService | Checkpoint, resume, retry logic |
 | **Config** | AppConfig | Loading, validation |
 
 ### 9.2 Test Naming Convention
@@ -379,27 +386,31 @@ LegacyDocProcessor process --input scan-results.json --retry-failed
 | 13 | ConfluenceClient_ConvertMarkdown_Tables | Markdown table → Confluence table |
 | 14 | LocalKB_GenerateTopicPage | Full topic page with metadata |
 | 15 | LocalKB_GenerateIndex | README with topic overview |
+| 16 | ProcessingState_SaveAndLoad | Verify state persistence |
+| 17 | ProcessingState_ResumeFromCheckpoint | Verify resume functionality |
+| 18 | ProcessingState_SkipCompletedFiles | Verify completed files skipped |
+| 19 | ProcessingState_RetryFailedFiles | Verify retry logic |
 
 ### 9.4 Priority 2 Tests (Edge Cases)
 
 | # | Test | Description |
 |---|------|-------------|
-| 16 | FileScanner_EmptyDirectory | Handle empty folder gracefully |
-| 17 | FileScanner_NonExistentPath | Throw clear exception |
-| 18 | TopicAggregator_EmptyInput | Handle no topics gracefully |
-| 19 | TopicAggregator_SingleWordTopic | Handle single-word topic names |
-| 20 | TopicAggregator_LongContent | Handle very long merged content |
-| 21 | ConfluenceClient_EmptyMarkdown | Handle empty input |
-| 22 | ConfluenceClient_SpecialCharacters | Escape HTML entities |
-| 23 | LocalKB_CreateNestedFolders | Handle deep topic paths |
+| 20 | FileScanner_EmptyDirectory | Handle empty folder gracefully |
+| 21 | FileScanner_NonExistentPath | Throw clear exception |
+| 22 | TopicAggregator_EmptyInput | Handle no topics gracefully |
+| 23 | TopicAggregator_SingleWordTopic | Handle single-word topic names |
+| 24 | TopicAggregator_LongContent | Handle very long merged content |
+| 25 | ConfluenceClient_EmptyMarkdown | Handle empty input |
+| 26 | ConfluenceClient_SpecialCharacters | Escape HTML entities |
+| 27 | LocalKB_CreateNestedFolders | Handle deep topic paths |
 
 ### 9.5 Priority 3 Tests (Integration Points)
 
 | # | Test | Description |
 |---|------|-------------|
-| 24 | ConfigLoader_ValidJson | Load valid config.json |
-| 25 | ConfigLoader_MissingFile | Handle missing config gracefully |
-| 26 | ConfigLoader_InvalidJson | Report clear error for malformed JSON |
+| 28 | ConfigLoader_ValidJson | Load valid config.json |
+| 29 | ConfigLoader_MissingFile | Handle missing config gracefully |
+| 30 | ConfigLoader_InvalidJson | Report clear error for malformed JSON |
 
 ### 9.6 Test Data Requirements
 
