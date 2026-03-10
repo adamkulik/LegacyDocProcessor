@@ -248,7 +248,7 @@ public class Program
         var json = await File.ReadAllTextAsync(inputPath);
         var scanData = JsonConvert.DeserializeObject<dynamic>(json);
         
-        var files = ((IEnumerable<dynamic>)scanData!.files)
+        var files = ((IEnumerable<dynamic>)scanData!.Files)
             .Select(f => new Models.DocumentFile
             {
                 FullPath = f.FullPath,
@@ -404,9 +404,9 @@ public class Program
                 Topics = d.Topics.Select(t => new TopicInfo
                 {
                     Topic = t.Topic,
-                    Relevance = 0.0,
-                    Summary = "",
-                    Content = ""
+                    Relevance = t.Relevance,
+                    Summary = t.Summary,
+                    Content = t.Content
                 }).ToList(),
                 d.TechnicalDetails,
                 d.ActionItems,
@@ -446,7 +446,7 @@ public class Program
         
         var documents = new List<Models.ProcessedKnowledge>();
         
-        foreach (var doc in processData!.documents)
+        foreach (var doc in processData!.Documents)
         {
             var knowledge = new Models.ProcessedKnowledge
             {
@@ -459,11 +459,13 @@ public class Program
             // Topics is List<string>, so we extract just the topic names
             foreach (var topic in doc.Topics)
             {
-                // Each topic could be a string OR an object with Topic property
-                if (topic is TopicInfo topicName)
+                knowledge.Topics.Add(new TopicInfo
                 {
-                    knowledge.Topics.Add(topicName);
-                }
+                    Summary = topic.Summary,
+                    Content = topic.Content,
+                    Relevance = topic.Relevance,
+                    Topic = topic.Topic
+                });
             }
             
             documents.Add(knowledge);
@@ -536,7 +538,7 @@ public class Program
         
         var topics = new List<Models.UnifiedTopic>();
         
-        foreach (var topic in aggData!.topics)
+        foreach (var topic in aggData!.Topics)
         {
             topics.Add(new Models.UnifiedTopic
             {
@@ -665,7 +667,7 @@ h3. Source Files
         
         var topics = new List<Models.UnifiedTopic>();
         
-        foreach (var topic in aggData!.topics)
+        foreach (var topic in aggData!.Topics)
         {
             topics.Add(new Models.UnifiedTopic
             {

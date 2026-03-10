@@ -153,8 +153,8 @@ public class LlmProcessingService : ILlmProcessingService
     /// </summary>
     private string BuildPrompt(ExtractedContent content)
     {
-        var truncatedContent = content.TextContent.Length > 15000
-            ? content.TextContent.Substring(0, 15000) + "\n\n[Content truncated...]"
+        var truncatedContent = content.TextContent.Length > 150000
+            ? content.TextContent.Substring(0, 150000) + "\n\n[Content truncated...]"
             : content.TextContent;
             
         var outputLanguage = _config.OutputLanguage ?? "English";
@@ -178,7 +178,7 @@ Please analyze the above document and translate ALL output fields to {outputLang
       ""topic"": ""Main topic or theme in {outputLanguage}"",
       ""relevance"": 0.0-1.0,
       ""summary"": ""Brief 1-2 sentence summary of this topic in {outputLanguage}"",
-      ""content"": ""The relevant content related to this topic (2-4 paragraphs) in {outputLanguage}""
+      ""content"": ""The relevant content related to this topic (4-6 paragraphs) in {outputLanguage}""
     }}
   ],
   ""summary"": ""A comprehensive 2-3 sentence summary of the entire document in {outputLanguage}"",
