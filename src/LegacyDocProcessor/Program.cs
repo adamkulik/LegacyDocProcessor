@@ -294,109 +294,113 @@ public class Program
         var extractorFactory = new ExtractorFactory(extractors);
         var textExtractor = new TextExtractorService(extractorFactory, Log.Logger);
         
-        // Phase 1: Extract text from files (only for files that need processing)
-        AnsiConsole.MarkupLine("[cyan]Phase 1: Extracting text...[/]");
-        
-        var extractedContents = new List<Models.ExtractedContent>();
-        var filesToExtract = files.Where(f => filesToProcess.Contains(f.FullPath)).ToList();
-        
-        await AnsiConsole.Progress()
-            .Columns(new TaskDescriptionColumn(), new SpinnerColumn(), new PercentageColumn(), new RemainingTimeColumn())
-            .StartAsync(async ctx =>
-            {
-                var task = ctx.AddTask("[cyan]Extracting text...[/]");
-                task.MaxValue = filesToExtract.Count;
-                
-                foreach (var file in filesToExtract)
-                {
-                    try
-                    {
-                        var content = await textExtractor.ExtractAsync(file.FullPath);
-                        extractedContents.Add(content);
-                        
-                        if (content.IsSuccess)
-                        {
-                            stateService.MarkCompleted(file.FullPath);
-                        }
-                        else
-                        {
-                            stateService.MarkFailed(file.FullPath, content.ErrorMessage ?? "Unknown extraction error");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Warning("Failed to extract {File}: {Error}", file.FileName, ex.Message);
-                        stateService.MarkFailed(file.FullPath, ex.Message);
-                    }
-                    
-                    task.Increment(1);
-                    task.Description = $"Extracted: {file.FileName}";
-                }
-            });
-        
-        var successCount = extractedContents.Count(c => c.IsSuccess);
-        var failedCount = extractedContents.Count(c => !c.IsSuccess);
-        AnsiConsole.MarkupLine($"[green]Extracted {successCount}/{filesToExtract.Count} files successfully[/]");
-        
-        if (failedCount > 0)
-        {
-            AnsiConsole.MarkupLine($"[red]Failed to extract {failedCount} files[/]");
-        }
-        
-        // Phase 2: Process with LLM (only successful extractions)
-        AnsiConsole.MarkupLine("[cyan]Phase 2: Processing with LLM...[/]");
-        
+        // Initialize LLM service
         var llmService = new LlmProcessingService(config.Llm, Log.Logger);
-        var processedKnowledge = new List<Models.ProcessedKnowledge>();
-        
-        var successfulContents = extractedContents.Where(c => c.IsSuccess).ToList();
-        
-        await AnsiConsole.Progress()
-            .Columns(new TaskDescriptionColumn(), new SpinnerColumn(), new PercentageColumn(), new RemainingTimeColumn())
-            .StartAsync(async ctx =>
-            {
-                var task = ctx.AddTask("[cyan]Processing with LLM...[/]");
-                task.MaxValue = successfulContents.Count;
-                
-                foreach (var content in successfulContents)
-                {
-                    try
-                    {
-                        var result = await llmService.ProcessContentAsync(content);
-                        processedKnowledge.Add(result);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Warning("Failed to process {File}: {Error}", content.FileName, ex.Message);
-                        // Mark as failed in state
-                        stateService.MarkFailed(content.FilePath, ex.Message);
-                    }
-                    
-                    task.Increment(1);
-                    task.Description = $"LLM: {content.FileName}";
-                }
-            });
         
         // Load any previously processed documents when resuming
+        var processedKnowledge = new List<Models.ProcessedKnowledge>();
         var checkpoint = stateService.GetCheckpoint();
         if (checkpoint.ProcessedDocuments.Any())
         {
-            // Merge with newly processed documents, avoiding duplicates
-            var newFilePaths = processedKnowledge.Select(p => p.FilePath).ToHashSet();
-            var existingDocs = checkpoint.ProcessedDocuments.Where(p => !newFilePaths.Contains(p.FilePath)).ToList();
-            processedKnowledge.AddRange(existingDocs);
-            AnsiConsole.MarkupLine($"[cyan]Loaded {existingDocs.Count} previously processed documents[/]");
+            processedKnowledge.AddRange(checkpoint.ProcessedDocuments);
+            AnsiConsole.MarkupLine($"[cyan]Loaded {checkpoint.ProcessedDocuments.Count} previously processed documents from checkpoint[/]");
         }
         
+        // Set up output path
         var outputPath = GetArgValue(args, "--output", "-o") ?? stateService.OutputFile;
         
+        // PER-FILE PROCESSING: Extract → LLM → Save checkpoint → Save output
+        // This ensures resume works correctly even if killed mid-processing
+        await AnsiConsole.Progress()
+            .Columns(new TaskDescriptionColumn(), new SpinnerColumn(), new PercentageColumn(), new RemainingTimeColumn())
+            .StartAsync(async ctx =>
+            {
+                var task = ctx.AddTask("[cyan]Processing files...[/]");
+                task.MaxValue = filesToProcess.Count;
+                
+                foreach (var file in filesToProcess)
+                {
+                    try
+                    {
+                        // Phase 1: Extract text
+                        var content = await textExtractor.ExtractAsync(file.FullPath);
+                        
+                        if (!content.IsSuccess)
+                        {
+                            // Extraction failed - mark as failed in state
+                            stateService.MarkFailed(file.FullPath, content.ErrorMessage ?? "Unknown extraction error");
+                            task.Description = $"[red]Extraction failed: {file.FileName}[/]";
+                            task.Increment(1);
+                            continue;
+                        }
+                        
+                        // Phase 2: Process with LLM
+                        try
+                        {
+                            var result = await llmService.ProcessContentAsync(content);
+                            processedKnowledge.Add(result);
+                            
+                            // Only mark as completed AFTER full processing (not just extraction)
+                            // Pass the processed knowledge to be stored in checkpoint
+                            stateService.MarkCompleted(file.FullPath, result);
+                            
+                            task.Description = $"[green]Processed: {file.FileName}[/]";
+                        }
+                        catch (Exception ex)
+                        {
+                            // LLM processing failed
+                            Log.Warning("Failed to process {File} with LLM: {Error}", file.FileName, ex.Message);
+                            stateService.MarkFailed(file.FullPath, $"LLM error: {ex.Message}");
+                            task.Description = $"[red]LLM failed: {file.FileName}[/]";
+                        }
+                        
+                        // Save output file incrementally after each file
+                        // This ensures we can resume even if killed mid-processing
+                        await SaveProcessedOutputAsync(outputPath, files.Count, processedKnowledge);
+                        
+                        // Also save checkpoint after each file to ensure resume works
+                        // (MarkCompleted already saves, but let's be explicit)
+                        stateService.Save();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Failed to process {File}: {Error}", file.FileName, ex.Message);
+                        stateService.MarkFailed(file.FullPath, ex.Message);
+                        task.Description = $"[red]Error: {file.FileName}[/]";
+                    }
+                    
+                    task.Increment(1);
+                }
+            });
+        
+        // Final save of output file
+        await SaveProcessedOutputAsync(outputPath, files.Count, processedKnowledge);
+        
+        // Show summary
+        var finalCheckpoint = stateService.GetCheckpoint();
+        AnsiConsole.MarkupLine($"[green]Processed {processedKnowledge.Count} documents saved to {outputPath}[/]");
+        AnsiConsole.MarkupLine($"[cyan]Summary:[/] {finalCheckpoint.CompletedFiles.Count} completed, {finalCheckpoint.FailedFiles.Count} failed, {files.Count - finalCheckpoint.CompletedFiles.Count - finalCheckpoint.FailedFiles.Count} remaining");
+        
+        if (finalCheckpoint.FailedFiles.Any())
+        {
+            AnsiConsole.MarkupLine($"[yellow]Run with --retry-failed to retry failed files[/]");
+        }
+        
+        return 0;
+    }
+
+    /// <summary>
+    /// Save processed output to file incrementally
+    /// </summary>
+    private static async Task SaveProcessedOutputAsync(string outputPath, int totalFiles, List<Models.ProcessedKnowledge> documents)
+    {
         var output = new
         {
             ProcessedAt = DateTime.UtcNow,
-            TotalFiles = files.Count,
-            ExtractedCount = successCount,
-            ProcessedCount = processedKnowledge.Count,
-            Documents = processedKnowledge.Select(d => new
+            TotalFiles = totalFiles,
+            ExtractedCount = documents.Count,
+            ProcessedCount = documents.Count,
+            Documents = documents.Select(d => new
             {
                 d.FilePath,
                 d.SuggestedTitle,
@@ -416,18 +420,6 @@ public class Program
         };
 
         await File.WriteAllTextAsync(outputPath, JsonConvert.SerializeObject(output, Formatting.Indented));
-        
-        // Show summary
-        var finalCheckpoint = stateService.GetCheckpoint();
-        AnsiConsole.MarkupLine($"[green]Processed {processedKnowledge.Count} documents saved to {outputPath}[/]");
-        AnsiConsole.MarkupLine($"[cyan]Summary:[/] {finalCheckpoint.CompletedFiles.Count} completed, {finalCheckpoint.FailedFiles.Count} failed, {files.Count - finalCheckpoint.CompletedFiles.Count - finalCheckpoint.FailedFiles.Count} remaining");
-        
-        if (finalCheckpoint.FailedFiles.Any())
-        {
-            AnsiConsole.MarkupLine($"[yellow]Run with --retry-failed to retry failed files[/]");
-        }
-        
-        return 0;
     }
 
     private static async Task<int> AggregateAsync(AppConfig config, string[] args)
