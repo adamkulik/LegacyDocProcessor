@@ -136,10 +136,11 @@ public class ConfluenceConfig
 
 public class ProcessingConfig
 {
-
-    
-
-
+    /// <summary>
+    /// License file name for Aspose products (e.g., "Aspose.Total.NET.lic")
+    /// The license file should be located in the application base directory
+    /// </summary>
+    public string? AsposeLicenseFileName { get; set; } = "Aspose.Total.NET.lic";
     
     /// <summary>
     /// Whether to skip files already processed (based on checksum)

@@ -164,18 +164,18 @@ public class ProcessingStateService
     /// <summary>
     /// Get list of files that still need processing
     /// </summary>
-    public List<string> GetFilesToProcess(List<string> allFiles, bool retryFailed = false)
+    public List<DocumentFile> GetFilesToProcess(List<DocumentFile> allFiles, bool retryFailed = false)
     {
         if (retryFailed)
         {
-            // Only process previously failed files
-            return _checkpoint.FailedFiles.Select(f => f.FilePath).ToList();
+            // Return previously failed files that are in our file list
+            var failedPaths = _checkpoint.FailedFiles.Select(f => f.FilePath).ToHashSet();
+            return allFiles.Where(f => failedPaths.Contains(f.FullPath)).ToList();
         }
         
         // Return files not yet completed
-        return allFiles
-            .Where(f => !_checkpoint.CompletedFiles.Contains(f))
-            .ToList();
+        var completedPaths = _checkpoint.CompletedFiles.ToHashSet();
+        return allFiles.Where(f => !completedPaths.Contains(f.FullPath)).ToList();
     }
 
     /// <summary>

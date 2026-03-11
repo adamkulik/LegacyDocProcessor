@@ -44,6 +44,19 @@ public class Program
             .WriteTo.File(logPath, rollingInterval: RollingInterval.Day)
             .CreateLogger();
         
+        // InitializeAspose license
+        var licenseService = new AsposeLicenseService(Log.Logger);
+        var licenseFileName = config.Processing.AsposeLicenseFileName;
+        if (!string.IsNullOrEmpty(licenseFileName))
+        {
+            Log.Information("InitializingAspose license: {LicenseFile}", licenseFileName);
+            licenseService.InitializeLicense(licenseFileName);
+        }
+        else
+        {
+            Log.Warning("Aspose license file name not configured - running in evaluation mode");
+        }
+        
         // Handle no arguments - show help
         if (args.Length == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h")
         {
@@ -259,11 +272,10 @@ public class Program
                 RelativePath = f.RelativePath
             })
             .ToList();
-        
+
         // Determine which files to process
-        var allFilePaths = files.Select(f => f.FullPath).ToList();
-        var filesToProcess = stateService.GetFilesToProcess(allFilePaths, retryFailed);
-        
+        var filesToProcess = stateService.GetFilesToProcess(files, retryFailed);
+
         AnsiConsole.MarkupLine($"[cyan]Processing {files.Count} files with LLM...[/]");
         
         if (retryFailed)
@@ -701,7 +713,7 @@ h3. Source Files
 ### Source References
 
 {string.Join("\n", topic.SourceFiles.Select(f => $"- [[{f}]]"))}
-";
+ ";
             
             await File.WriteAllTextAsync(Path.Combine(topicPath, "index.md"), md);
             topicIndex.Add($"- [{topic.Name}](topics/{safeName}/index.md) - {topic.SourceFiles.Count} sources");
