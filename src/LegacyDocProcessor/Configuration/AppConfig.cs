@@ -156,4 +156,91 @@ public class ProcessingConfig
     /// Batch size for LLM processing
     /// </summary>
     public int LlmBatchSize { get; set; } = 10;
+    
+    /// <summary>
+    /// OCR configuration for scanned PDF documents
+    /// </summary>
+    public OcrConfig Ocr { get; set; } = new();
+}
+
+/// <summary>
+/// OCR (Optical Character Recognition) configuration for scanned PDF documents.
+/// Uses Aspose.OCR (part of Aspose.Total license) for text recognition.
+/// </summary>
+public class OcrConfig
+{
+    /// <summary>
+    /// Enable or disable OCR processing for scanned PDFs
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+    
+    /// <summary>
+    /// Minimum text length extracted by PdfPig before falling back to OCR.
+    /// PDFs with less text than this threshold will be processed with OCR.
+    /// </summary>
+    public int MinTextLength { get; set; } = 100;
+    
+    /// <summary>
+    /// OCR language for text recognition.
+    /// Supported: English, German, French, Spanish, Italian, Portuguese, etc.
+    /// </summary>
+    public string Language { get; set; } = "English";
+    
+    /// <summary>
+    /// DPI (dots per inch) for PDF rendering during OCR.
+    /// Higher values give better OCR accuracy but slower processing.
+    /// Recommended: 300 for good quality, 150 for faster processing.
+    /// </summary>
+    public int Dpi { get; set; } = 300;
+    
+    /// <summary>
+    /// Enable automatic text area detection.
+    /// Improves accuracy for documents with complex layouts.
+    /// </summary>
+    public bool DetectAreas { get; set; } = true;
+    
+    /// <summary>
+    /// Enable automatic skew correction.
+    /// Corrects rotated or tilted scanned documents.
+    /// </summary>
+    public bool AutoSkew { get; set; } = true;
+    
+    /// <summary>
+    /// Timeout in milliseconds for OCR processing per document.
+    /// </summary>
+    public int TimeoutMs { get; set; } = 60000;
+    
+    /// <summary>
+    /// Maximum number of pages to process with OCR.
+    /// Pages beyond this limit will be skipped with a warning.
+    /// Set to 0 for unlimited.
+    /// </summary>
+    public int MaxPages { get; set; } = 0;
+    
+    /// <summary>
+    /// Enable parallel processing of PDF pages for OCR.
+    /// Can significantly speed up processing of multi-page documents.
+    /// </summary>
+    public bool ParallelProcessing { get; set; } = true;
+    
+    /// <summary>
+    /// Maximum degree of parallelism when ParallelProcessing is enabled.
+    /// </summary>
+    public int MaxDegreeOfParallelism { get; set; } = 4;
+    
+    /// <summary>
+    /// Path to Tesseract tessdata directory containing language data files.
+    /// Can be absolute or relative to application directory.
+    /// Default: "tessdata" (relative to application)
+    /// </summary>
+    public string TessDataPath { get; set; } = "tessdata";
+    
+    /// <summary>
+    /// Tesseract page segmentation mode.
+    /// Options: OsdOnly, AutoOsd, AutoOnly, Auto, SingleColumn, SingleBlockVertText,
+    /// SingleBlock, SingleLine, SingleWord, CircleWord, SingleChar, SparseText, 
+    /// SparseTextOsd, RawLine
+    /// Default: Auto
+    /// </summary>
+    public string PageSegMode { get; set; } = "Auto";
 }

@@ -28,6 +28,128 @@ public class ExtractedContent
     public DateTime ExtractedAt { get; set; } = DateTime.UtcNow;
     public bool IsSuccess { get; set; }
     public string? ErrorMessage { get; set; }
+    
+    /// <summary>
+    /// Indicates if OCR was used to extract text (for PDFs)
+    /// </summary>
+    public bool UsedOcr { get; set; }
+    
+    /// <summary>
+    /// OCR confidence score (0.0-1.0), only set when OCR was used
+    /// </summary>
+    public float? OcrConfidence { get; set; }
+}
+
+/// <summary>
+/// Represents the result of OCR processing
+/// </summary>
+public class OcrResult
+{
+    /// <summary>
+    /// The extracted text content
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Number of pages processed
+    /// </summary>
+    public int PageCount { get; set; }
+    
+    /// <summary>
+    /// Overall confidence score (0.0-1.0)
+    /// </summary>
+    public float Confidence { get; set; }
+    
+    /// <summary>
+    /// Time taken to process
+    /// </summary>
+    public TimeSpan ProcessingTime { get; set; }
+    
+    /// <summary>
+    /// Any warnings encountered during OCR
+    /// </summary>
+    public List<string> Warnings { get; set; } = new();
+    
+    /// <summary>
+    /// Text content per page (optional, for detailed processing)
+    /// </summary>
+    public List<OcrPageResult> Pages { get; set; } = new();
+    
+    /// <summary>
+    /// Indicates if OCR was successful
+    /// </summary>
+    public bool IsSuccess { get; set; } = true;
+    
+    /// <summary>
+    /// Error message if OCR failed
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+}
+
+/// <summary>
+/// Represents OCR result for a single page
+/// </summary>
+public class OcrPageResult
+{
+    public int PageNumber { get; set; }
+    public string Text { get; set; } = string.Empty;
+    public float Confidence { get; set; }
+}
+
+/// <summary>
+/// Represents the result of detecting whether a PDF is scanned/image-based
+/// </summary>
+public class PdfDetectionResult
+{
+    /// <summary>
+    /// Path to the analyzed PDF file
+    /// </summary>
+    public string FilePath { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Indicates whether the PDF appears to be scanned/image-based
+    /// </summary>
+    public bool IsScanned { get; set; }
+    
+    /// <summary>
+    /// Number of characters extracted directly from the PDF (before OCR)
+    /// </summary>
+    public int DirectTextLength { get; set; }
+    
+    /// <summary>
+    /// Total number of pages in the PDF
+    /// </summary>
+    public int PageCount { get; set; }
+    
+    /// <summary>
+    /// Number of pages that contain extractable text
+    /// </summary>
+    public int TextPageCount { get; set; }
+    
+    /// <summary>
+    /// Number of pages that appear to be image-only
+    /// </summary>
+    public int ImagePageCount { get; set; }
+    
+    /// <summary>
+    /// Detection confidence (0.0-1.0)
+    /// </summary>
+    public float Confidence { get; set; }
+    
+    /// <summary>
+    /// Human-readable description of the detection result
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Indicates if the detection was successful
+    /// </summary>
+    public bool IsSuccess { get; set; } = true;
+    
+    /// <summary>
+    /// Error message if detection failed
+    /// </summary>
+    public string? ErrorMessage { get; set; }
 }
 
 /// <summary>

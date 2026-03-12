@@ -294,10 +294,26 @@ public class Program
         }
         
         // Set up extractors
+        // Initialize OCR service for scanned PDFs (using Aspose.OCR)
+        IOcrService? ocrService = null;
+        if (config.Processing.Ocr.Enabled)
+        {
+            ocrService = new AsposeOcrService(Log.Logger, config.Processing.Ocr);
+            if (ocrService.IsAvailable())
+            {
+                AnsiConsole.MarkupLine($"[cyan]OCR enabled (Aspose.OCR):[/] Language={config.Processing.Ocr.Language}, DetectAreas={config.Processing.Ocr.DetectAreas}");
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("[yellow]OCR configured but Aspose.OCR not available. Scanned PDFs will have limited text extraction.[/]");
+                ocrService = null;
+            }
+        }
+        
         var extractors = new List<ITextExtractor>
         {
             new MsgExtractor(),
-            new PdfExtractor(Log.Logger),
+            new PdfExtractor(Log.Logger, ocrService, config.Processing.Ocr),
             new DocxExtractor(),
             new DocExtractor(Log.Logger),
             new TextExtractor()

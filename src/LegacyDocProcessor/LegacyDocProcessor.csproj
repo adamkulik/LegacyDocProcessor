@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>LegacyDocProcessor</RootNamespace>
@@ -21,6 +21,15 @@
     
     <!-- .pdf extraction -->
     <PackageReference Include="PdfPig" Version="0.1.8" />
+    
+    <!-- OCR Support for scanned PDFs (Aspose.OCR - part of Aspose.Total license) -->
+    <PackageReference Include="Aspose.OCR" Version="24.5.0" />
+    
+    <!-- Tesseract OCR -->
+    <PackageReference Include="Tesseract" Version="5.2.0" />
+    
+    <!-- System.Drawing.Common with alias to avoid conflict with Aspose.Drawing -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" Aliases="SystemDrawing" />
     
     <!-- Logging -->
     <PackageReference Include="Serilog" Version="3.1.1" />
