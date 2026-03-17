@@ -493,7 +493,25 @@ public class Program
         
         AnsiConsole.MarkupLine($"[cyan]Aggregating {documents.Count} documents by topic...[/]");
         
-        var aggregator = new TopicAggregatorService(Log.Logger);
+        // Set up topic deduplication if enabled
+        ITopicMappingService? mappingService = null;
+        TopicDeduplicationConfig? dedupConfig = config.Processing.TopicDeduplication;
+        
+        if (dedupConfig?.Enabled == true)
+        {
+            AnsiConsole.MarkupLine($"[cyan]Topic deduplication enabled:[/] Threshold={dedupConfig.SimilarityThreshold}, Aggressiveness={dedupConfig.Aggressiveness}");
+            
+            // Create the deduplication pipeline services
+            var normalizer = new TopicNormalizer(dedupConfig, Log.Logger);
+            var deduplicationService = new TopicDeduplicationService(config.Llm, dedupConfig, Log.Logger);
+            mappingService = new TopicMappingService(Log.Logger, deduplicationService, normalizer, dedupConfig);
+        }
+        else
+        {
+            AnsiConsole.MarkupLine("[yellow]Topic deduplication is disabled[/]");
+        }
+        
+        var aggregator = new TopicAggregatorService(Log.Logger, mappingService, dedupConfig);
         var result = await aggregator.AggregateAsync(documents);
         
         AnsiConsole.MarkupLine($"[green]Aggregated into {result.Topics.Count} topics[/]");
