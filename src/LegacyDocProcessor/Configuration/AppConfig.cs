@@ -161,6 +161,11 @@ public class ProcessingConfig
     /// OCR configuration for scanned PDF documents
     /// </summary>
     public OcrConfig Ocr { get; set; } = new();
+    
+    /// <summary>
+    /// Topic deduplication and normalization configuration
+    /// </summary>
+    public TopicDeduplicationConfig TopicDeduplication { get; set; } = new();
 }
 
 /// <summary>
@@ -243,4 +248,128 @@ public class OcrConfig
     /// Default: Auto
     /// </summary>
     public string PageSegMode { get; set; } = "Auto";
+}
+
+/// <summary>
+/// Aggressiveness level for topic merging.
+/// </summary>
+public enum AggressivenessLevel
+{
+    /// <summary>
+    /// Conservative: Only merge topics that are nearly identical.
+    /// Minimizes false positives but may leave some duplicates.
+    /// </summary>
+    Conservative,
+    
+    /// <summary>
+    /// Medium: Balance between catching duplicates and avoiding false positives.
+    /// Recommended for most use cases.
+    /// </summary>
+    Medium,
+    
+    /// <summary>
+    /// Aggressive: Merge topics that share the same core concept.
+    /// Maximizes consolidation but may occasionally merge distinct topics.
+    /// </summary>
+    Aggressive
+}
+
+/// <summary>
+/// Topic deduplication and normalization configuration.
+/// Reduces topic fragmentation by normalizing and merging similar topics.
+/// </summary>
+public class TopicDeduplicationConfig
+{
+    /// <summary>
+    /// Enable or disable topic deduplication processing
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+    
+    /// <summary>
+    /// Custom merge rules for topic normalization.
+    /// These rules are applied before LLM-based canonicalization.
+    /// </summary>
+    public List<CustomMergeRule> CustomMergeRules { get; set; } = new();
+    
+    /// <summary>
+    /// Similarity threshold (0.0-1.0) for fuzzy topic matching.
+    /// Topics with similarity above this threshold may be merged.
+    /// Higher values = more strict matching (fewer merges).
+    /// </summary>
+    public double SimilarityThreshold { get; set; } = 0.85;
+    
+    /// <summary>
+    /// Maximum number of topics to send to LLM in a single canonicalization request.
+    /// </summary>
+    public int LlmBatchSize { get; set; } = 50;
+    
+    /// <summary>
+    /// Minimum number of similar topics required to trigger LLM canonicalization.
+    /// Groups smaller than this are handled by rule-based normalization only.
+    /// </summary>
+    public int MinTopicsForLlmCanonicalization { get; set; } = 3;
+    
+    /// <summary>
+    /// Aggressiveness level for topic merging.
+    /// Controls how aggressively the LLM should merge similar topics.
+    /// </summary>
+    public AggressivenessLevel Aggressiveness { get; set; } = AggressivenessLevel.Medium;
+    
+    /// <summary>
+    /// When true, preserve distinct technical terms and acronyms.
+    /// Prevents merging of topics that contain different technical identifiers
+    /// (e.g., "API-123" and "API-456" will not be merged).
+    /// </summary>
+    public bool PreserveTechnicalTerms { get; set; } = true;
+    
+    /// <summary>
+    /// Technical term patterns to preserve (regex patterns).
+    /// Topics matching these patterns will not be merged with each other.
+    /// </summary>
+    public List<string> TechnicalTermPatterns { get; set; } = new()
+    {
+        @"[A-Z]{2,}-\d+",           // JIRA-style: PROJ-123, API-456
+        @"\b[A-Z]{3,}\d{3,}\b",     // Codes: ABC123, XYZ789
+        @"v\d+\.\d+",               // Version numbers: v1.0, v2.5
+        @"\b[A-Z]{2,}\d+[A-Z]*\b"   // Mixed codes: AB12C, XY99Z
+    };
+    
+    /// <summary>
+    /// When true, log all topic merges to a JSON file for auditing and debugging.
+    /// </summary>
+    public bool LogMerges { get; set; } = false;
+    
+    /// <summary>
+    /// Path to the merge log file (relative to output directory or absolute path).
+    /// Default: "topic-merges.json"
+    /// </summary>
+    public string MergeLogPath { get; set; } = "topic-merges.json";
+}
+
+/// <summary>
+/// Custom merge rule for normalizing topic variations.
+/// </summary>
+public class CustomMergeRule
+{
+    /// <summary>
+    /// Human-readable name for this rule (e.g., "Project Code Variations")
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Regex pattern to match topic variations.
+    /// Use capture groups to extract the canonical form.
+    /// </summary>
+    public string Pattern { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Replacement pattern for the canonical form.
+    /// Use $1, $2, etc. to reference capture groups.
+    /// </summary>
+    public string CanonicalReplacement { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Example variations this rule handles (for documentation/debugging)
+    /// </summary>
+    public List<string> ExampleVariations { get; set; } = new();
 }

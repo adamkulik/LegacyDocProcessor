@@ -210,3 +210,153 @@ public class ProcessingState
     public string? ConfluencePageId { get; set; }
     public string? ErrorMessage { get; set; }
 }
+
+/// <summary>
+/// Represents a single topic merge decision
+/// </summary>
+public class TopicMergeResult
+{
+    /// <summary>
+    /// The canonical/normalized topic name to use
+    /// </summary>
+    public string CanonicalName { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// List of original topic names that were merged into the canonical name
+    /// </summary>
+    public List<string> MergedTopics { get; set; } = new();
+    
+    /// <summary>
+    /// Confidence score for this merge decision (0.0-1.0)
+    /// </summary>
+    public float Confidence { get; set; }
+    
+    /// <summary>
+    /// Human-readable explanation for why these topics were merged
+    /// </summary>
+    public string? Rationale { get; set; }
+    
+    /// <summary>
+    /// Source of the merge decision (e.g., "Rule", "LLM", "Manual")
+    /// </summary>
+    public string Source { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Represents the complete result of topic deduplication
+/// </summary>
+public class DeduplicationResult
+{
+    /// <summary>
+    /// Maps original topic names to their canonical names
+    /// </summary>
+    public Dictionary<string, string> TopicMapping { get; set; } = new();
+    
+    /// <summary>
+    /// List of all merge decisions made
+    /// </summary>
+    public List<TopicMergeResult> MergeGroups { get; set; } = new();
+    
+    /// <summary>
+    /// Number of original (unique) topics before deduplication
+    /// </summary>
+    public int OriginalTopicCount { get; set; }
+    
+    /// <summary>
+    /// Number of canonical topics after deduplication
+    /// </summary>
+    public int CanonicalTopicCount { get; set; }
+    
+    /// <summary>
+    /// Ratio of topics that were merged (0.0-1.0)
+    /// </summary>
+    public float MergeRatio => OriginalTopicCount > 0 
+        ? 1.0f - ((float)CanonicalTopicCount / OriginalTopicCount) 
+        : 0.0f;
+    
+    /// <summary>
+    /// Number of topics that were not merged (kept as-is)
+    /// </summary>
+    public int UnmergedCount { get; set; }
+    
+    /// <summary>
+    /// Processing time for deduplication
+    /// </summary>
+    public TimeSpan ProcessingTime { get; set; }
+    
+    /// <summary>
+    /// Indicates if deduplication was successful
+    /// </summary>
+    public bool IsSuccess { get; set; } = true;
+    
+    /// <summary>
+    /// Error message if deduplication failed
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+}
+
+/// <summary>
+/// Statistics about the topic merge/deduplication process
+/// </summary>
+public class MergeStatistics
+{
+    /// <summary>
+    /// Number of custom rules that were applied
+    /// </summary>
+    public int RulesApplied { get; set; }
+    
+    /// <summary>
+    /// Number of topics normalized by custom rules
+    /// </summary>
+    public int TopicsNormalizedByRules { get; set; }
+    
+    /// <summary>
+    /// Number of LLM batches processed
+    /// </summary>
+    public int LlmBatchesProcessed { get; set; }
+    
+    /// <summary>
+    /// Number of topics canonicalized by LLM
+    /// </summary>
+    public int TopicsCanonicalizedByLlm { get; set; }
+    
+    /// <summary>
+    /// Number of topics kept as-is (no merge needed)
+    /// </summary>
+    public int TopicsUnchanged { get; set; }
+    
+    /// <summary>
+    /// Number of exact duplicates found and merged
+    /// </summary>
+    public int ExactDuplicatesMerged { get; set; }
+    
+    /// <summary>
+    /// Number of fuzzy/similar matches merged
+    /// </summary>
+    public int FuzzyMatchesMerged { get; set; }
+    
+    /// <summary>
+    /// Time spent on rule-based normalization
+    /// </summary>
+    public TimeSpan RuleNormalizationTime { get; set; }
+    
+    /// <summary>
+    /// Time spent on LLM canonicalization
+    /// </summary>
+    public TimeSpan LlmCanonicalizationTime { get; set; }
+    
+    /// <summary>
+    /// Total processing time
+    /// </summary>
+    public TimeSpan TotalTime { get; set; }
+    
+    /// <summary>
+    /// Average confidence score for LLM decisions
+    /// </summary>
+    public float? AverageLlmConfidence { get; set; }
+    
+    /// <summary>
+    /// Timestamp when statistics were recorded
+    /// </summary>
+    public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
+}

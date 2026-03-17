@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using LegacyDocProcessor.Configuration;
 using LegacyDocProcessor.Models;
 using Serilog;
 
@@ -10,8 +11,9 @@ namespace LegacyDocProcessor.Services;
 /// </summary>
 public interface ITopicAggregatorService
 {
-    AggregationResult Aggregate(List<ProcessedKnowledge> processedDocuments);
+    Task<AggregationResult> AggregateAsync(List<ProcessedKnowledge> processedDocuments, CancellationToken cancellationToken = default);
     string MergeTopicContent(List<TopicSource> sources);
+    Task<TopicMappingDictionary?> GetLastMappingAsync();
 }
 
 /// <summary>
@@ -20,6 +22,8 @@ public interface ITopicAggregatorService
 public class TopicAggregatorService : ITopicAggregatorService
 {
     private readonly ILogger _logger;
+    private readonly ITopicMappingService? _mappingService;
+    private readonly TopicDeduplicationConfig? _dedupConfig;
     
     // Minimum relevance threshold to include content in merged topic
     private const double MinRelevanceThreshold = 0.2;
@@ -27,15 +31,25 @@ public class TopicAggregatorService : ITopicAggregatorService
     // Maximum content length per source before truncation
     private const int MaxSourceContentLength = 8000;
     
-    public TopicAggregatorService(ILogger logger)
+    // Cache the last mapping for downstream use
+    private TopicMappingDictionary? _lastMapping;
+    
+    public TopicAggregatorService(
+        ILogger logger, 
+        ITopicMappingService? mappingService = null,
+        TopicDeduplicationConfig? dedupConfig = null)
     {
         _logger = logger;
+        _mappingService = mappingService;
+        _dedupConfig = dedupConfig;
     }
     
     /// <summary>
-    /// Aggregate processed documents into unified topics
+    /// Aggregate processed documents into unified topics (with deduplication)
     /// </summary>
-    public AggregationResult Aggregate(List<ProcessedKnowledge> processedDocuments)
+    public async Task<AggregationResult> AggregateAsync(
+        List<ProcessedKnowledge> processedDocuments, 
+        CancellationToken cancellationToken = default)
     {
         _logger.Information("Starting topic aggregation for {Count} documents", processedDocuments.Count);
         
@@ -44,8 +58,8 @@ public class TopicAggregatorService : ITopicAggregatorService
             TotalSourceFiles = processedDocuments.Count
         };
         
-        // Group content by normalized topic name
-        var topicGroups = new Dictionary<string, List<TopicSource>>(StringComparer.OrdinalIgnoreCase);
+        // Collect all topics with their sources
+        var topicSources = new Dictionary<string, List<TopicSource>>(StringComparer.OrdinalIgnoreCase);
         
         foreach (var doc in processedDocuments)
         {
@@ -58,13 +72,10 @@ public class TopicAggregatorService : ITopicAggregatorService
                     continue;
                 }
                 
-                // Normalize topic name for grouping
-                var normalizedTopic = NormalizeTopicName(topicInfo.Topic);
-                
-                if (!topicGroups.TryGetValue(normalizedTopic, out var sources))
+                if (!topicSources.TryGetValue(topicInfo.Topic, out var sources))
                 {
                     sources = new List<TopicSource>();
-                    topicGroups[normalizedTopic] = sources;
+                    topicSources[topicInfo.Topic] = sources;
                 }
                 
                 sources.Add(new TopicSource
@@ -78,8 +89,27 @@ public class TopicAggregatorService : ITopicAggregatorService
             }
         }
         
+        // Get topic name mappings from mapping service
+        var topicMapping = await GetTopicMappingsAsync(topicSources.Keys.ToList(), cancellationToken);
+        
+        // Group content by canonical topic name
+        var canonicalGroups = new Dictionary<string, List<TopicSource>>(StringComparer.OrdinalIgnoreCase);
+        
+        foreach (var (originalTopic, sources) in topicSources)
+        {
+            var canonicalTopic = topicMapping.GetCanonicalTopic(originalTopic);
+            
+            if (!canonicalGroups.TryGetValue(canonicalTopic, out var groupSources))
+            {
+                groupSources = new List<TopicSource>();
+                canonicalGroups[canonicalTopic] = groupSources;
+            }
+            
+            groupSources.AddRange(sources);
+        }
+        
         // Build unified topics from groups
-        foreach (var (topicName, sources) in topicGroups)
+        foreach (var (topicName, sources) in canonicalGroups)
         {
             // Sort by relevance (highest first)
             var sortedSources = sources.OrderByDescending(s => s.Relevance).ToList();
@@ -113,6 +143,72 @@ public class TopicAggregatorService : ITopicAggregatorService
             result.Topics.Count, processedDocuments.Count);
         
         return result;
+    }
+    
+    /// <summary>
+    /// Get topic name mappings from mapping service
+    /// </summary>
+    private async Task<TopicMappingDictionary> GetTopicMappingsAsync(
+        List<string> topicNames, 
+        CancellationToken cancellationToken)
+    {
+        if (_mappingService == null || topicNames.Count < 3)
+        {
+            _logger.Debug("Skipping topic deduplication (service not available or too few topics)");
+            return new TopicMappingDictionary { Source = "None" };
+        }
+        
+        try
+        {
+            var mapping = await _mappingService.BuildFromTopicsAsync(topicNames, cancellationToken);
+            _lastMapping = mapping; // Cache for downstream use
+            
+            _logger.Information("Topic mapping: {Original} topics → {Canonical} canonical topics (merge ratio: {Ratio:F2})",
+                mapping.Statistics.TotalMappings, 
+                mapping.Statistics.UniqueCanonicalTopics,
+                mapping.Statistics.MergeRatio);
+            
+            // Log merge groups for debugging
+            foreach (var canonical in mapping.GetAllCanonicalTopics())
+            {
+                var originals = mapping.GetOriginalTopics(canonical);
+                if (originals.Count > 1)
+                {
+                    _logger.Debug("Merged topics into '{Canonical}': {Members}",
+                        canonical, string.Join(", ", originals));
+                }
+            }
+            
+            // Save merge log if configured
+            if (_dedupConfig?.LogMerges == true)
+            {
+                try
+                {
+                    var mergeLog = _mappingService.BuildMergeLog(mapping, _dedupConfig.Aggressiveness.ToString());
+                    await _mappingService.SaveMergeLogAsync(mergeLog, _dedupConfig.MergeLogPath, cancellationToken);
+                    _logger.Information("Topic merge log saved to {Path}", _dedupConfig.MergeLogPath);
+                }
+                catch (Exception logEx)
+                {
+                    _logger.Warning(logEx, "Failed to save topic merge log to {Path}", _dedupConfig.MergeLogPath);
+                }
+            }
+            
+            return mapping;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Topic mapping failed, proceeding without deduplication");
+            return new TopicMappingDictionary { Source = "Error" };
+        }
+    }
+    
+    /// <summary>
+    /// Get the last mapping dictionary for downstream use
+    /// </summary>
+    public Task<TopicMappingDictionary?> GetLastMappingAsync()
+    {
+        return Task.FromResult(_lastMapping);
     }
     
     /// <summary>
@@ -222,27 +318,6 @@ public class TopicAggregatorService : ITopicAggregatorService
         sb.AppendLine(content);
         
         return sb.ToString();
-    }
-    
-    /// <summary>
-    /// Normalize topic name for grouping
-    /// </summary>
-    private string NormalizeTopicName(string topic)
-    {
-        // Trim, remove extra whitespace, capitalize first letter of each word
-        var normalized = topic.Trim();
-        
-        // Remove common prefixes/suffixes that don't add meaning
-        normalized = Regex.Replace(normalized, @"^(the\s+|a\s+|an\s+)", "", RegexOptions.IgnoreCase);
-        
-        // Normalize whitespace
-        normalized = Regex.Replace(normalized, @"\s+", " ");
-        
-        // Title case
-        normalized = System.Globalization.CultureInfo.CurrentCulture
-            .TextInfo.ToTitleCase(normalized.ToLower());
-        
-        return normalized;
     }
     
     /// <summary>

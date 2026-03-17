@@ -21,7 +21,7 @@ public class TopicAggregatorTests
     /// Test 4: TopicAggregator_GroupByTopic
     /// </summary>
     [Fact]
-    public void GroupByTopic_ShouldGroupDocumentsByNormalizedTopicName()
+    public async void GroupByTopic_ShouldGroupDocumentsByNormalizedTopicName()
     {
         // Arrange
         var documents = new List<ProcessedKnowledge>
@@ -32,7 +32,7 @@ public class TopicAggregatorTests
         };
         
         // Act
-        var result = _aggregator.Aggregate(documents);
+        var result = await _aggregator.AggregateAsync(documents);
         
         // Assert
         result.Topics.Should().HaveCount(2);
@@ -49,7 +49,7 @@ public class TopicAggregatorTests
     /// Test 5: TopicAggregator_MultipleFilesOneTopic
     /// </summary>
     [Fact]
-    public void MultipleFilesOneTopic_ShouldMergeContentFromMultipleSources()
+    public async void MultipleFilesOneTopic_ShouldMergeContentFromMultipleSources()
     {
         // Arrange
         var documents = new List<ProcessedKnowledge>
@@ -60,7 +60,7 @@ public class TopicAggregatorTests
         };
         
         // Act
-        var result = _aggregator.Aggregate(documents);
+        var result = await _aggregator.AggregateAsync(documents);
         
         // Assert
         result.Topics.Should().HaveCount(1);
@@ -73,7 +73,7 @@ public class TopicAggregatorTests
     /// Test 6: TopicAggregator_OrderByRelevance
     /// </summary>
     [Fact]
-    public void OrderByRelevance_ShouldSortTopicsBySourceCount()
+    public async void OrderByRelevance_ShouldSortTopicsBySourceCount()
     {
         // Arrange
         var documents = new List<ProcessedKnowledge>
@@ -84,7 +84,7 @@ public class TopicAggregatorTests
         };
         
         // Act
-        var result = _aggregator.Aggregate(documents);
+        var result = await _aggregator.AggregateAsync(documents);
         
         // Assert
         result.Topics.Should().HaveCount(2);
@@ -95,7 +95,7 @@ public class TopicAggregatorTests
     /// Test 7: TopicAggregator_DeduplicateContent
     /// </summary>
     [Fact]
-    public void DeduplicateContent_ShouldRemoveDuplicateParagraphs()
+    public async void DeduplicateContent_ShouldRemoveDuplicateParagraphs()
     {
         // Arrange
         var duplicateContent = "This is the same content that appears in multiple files.";
@@ -108,7 +108,7 @@ public class TopicAggregatorTests
         };
         
         // Act
-        var result = _aggregator.Aggregate(documents);
+        var result = await _aggregator.AggregateAsync(documents);
         
         // Assert
         var mergedContent = result.Topics[0].MergedContent;
@@ -125,13 +125,13 @@ public class TopicAggregatorTests
     /// Test 18: TopicAggregator_EmptyInput
     /// </summary>
     [Fact]
-    public void EmptyInput_ShouldReturnEmptyResult()
+    public async void EmptyInput_ShouldReturnEmptyResult()
     {
         // Arrange
         var documents = new List<ProcessedKnowledge>();
         
         // Act
-        var result = _aggregator.Aggregate(documents);
+        var result = await _aggregator.AggregateAsync(documents);
         
         // Assert
         result.Topics.Should().BeEmpty();
@@ -142,7 +142,7 @@ public class TopicAggregatorTests
     /// Test 19: TopicAggregator_SingleWordTopic
     /// </summary>
     [Fact]
-    public void SingleWordTopic_ShouldHandleShortTopicNames()
+    public async void SingleWordTopic_ShouldHandleShortTopicNames()
     {
         // Arrange
         var documents = new List<ProcessedKnowledge>
@@ -151,7 +151,7 @@ public class TopicAggregatorTests
         };
         
         // Act
-        var result = _aggregator.Aggregate(documents);
+        var result = await _aggregator.AggregateAsync(documents);
         
         // Assert
         result.Topics.Should().HaveCount(1);
@@ -162,7 +162,7 @@ public class TopicAggregatorTests
     /// Test 20: TopicAggregator_LongContent
     /// </summary>
     [Fact]
-    public void LongContent_ShouldTruncateExcessiveContent()
+    public async void LongContent_ShouldTruncateExcessiveContent()
     {
         // Arrange
         var longContent = new string('a', 15000);
@@ -172,7 +172,7 @@ public class TopicAggregatorTests
         };
         
         // Act
-        var result = _aggregator.Aggregate(documents);
+        var result = await _aggregator.AggregateAsync(documents);
         
         // Assert
         // Content should be truncated to MaxSourceContentLength (8000)

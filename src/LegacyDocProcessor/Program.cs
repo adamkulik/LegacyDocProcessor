@@ -494,7 +494,7 @@ public class Program
         AnsiConsole.MarkupLine($"[cyan]Aggregating {documents.Count} documents by topic...[/]");
         
         var aggregator = new TopicAggregatorService(Log.Logger);
-        var result = aggregator.Aggregate(documents);
+        var result = await aggregator.AggregateAsync(documents);
         
         AnsiConsole.MarkupLine($"[green]Aggregated into {result.Topics.Count} topics[/]");
         
